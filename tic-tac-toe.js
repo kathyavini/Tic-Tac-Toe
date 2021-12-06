@@ -1,6 +1,7 @@
 
 // Gameboard Module. Stores the board as an array, displays the array, checks for win states
 // Public methods: updateBoard, clearBoard
+// For use by the AI, board and checkWin() are now also public
 let gameBoard = (function(){
     
     let board = [
@@ -64,7 +65,7 @@ let gameBoard = (function(){
         }
     }
         
-    function checkWin() {
+    function checkWin(board = gameBoard.board) {
         // row wins
         for (let i = 0; i < 9; i += 3) {
             if (board[i] !== 0 &&
@@ -108,13 +109,15 @@ let gameBoard = (function(){
     return {
         updateBoard,
         clearBoard,
-        board, // wasn't planning to expose, but AI!
+        board, // wasn't planning to expose, but AI needs this
+        checkWin,
     }
     
 })();
 
 // Game module. Event listeners for board, currentPlayer control, updating hover preview according to current player.
-// Public methods: addEventListeners, endGame
+// Public methods: addEventListeners, endGame() - for use by gameBoard.checkWin();
+// AIPlayer and AIPlayerToggle also public
 let game = (function() {
     
     let AIPlayer = true;
@@ -155,8 +158,9 @@ let game = (function() {
         
         if (AIPlayer) {
             gameBoard.updateBoard(1, this.dataset.square);
-            AI.randomMove();
 
+            // AI.randomMove();
+            AI.bestMove();
             return;
         }
 
@@ -175,7 +179,7 @@ let game = (function() {
         winLine.classList.add('visible');
     }
 
-    function moveWinLine(coordinates) { // as string '[start, end]'
+    function moveWinLine(coordinates) { // string '[start, end]'
         switch (coordinates) {
             case '[1, 9]': // diagonal
                 lineTransform = 'rotate(45deg) translate(-148px, -148px)';
@@ -255,7 +259,7 @@ let game = (function() {
             AIPlayer = false;
         }
 
-        // This necessary for the name module to call this this
+        // This apparently necessary for the players module to access the updated version
         this.AIPlayer = AIPlayer;
         resetButton.click();
     }
@@ -271,9 +275,10 @@ let game = (function() {
 
 // The players objects
 
-// Not so sure why I would use these
-// Currently they only store and display their names.
-// But I need to practice making a factory function, so...
+// Currently they only store and display names.
+// Probably I would not have implemented it like this,
+// But I was following TOP instructions to practice
+// factory functions
 
 function createPlayer(playerNumber) {
 
@@ -283,9 +288,11 @@ function createPlayer(playerNumber) {
 
     playerSpan.addEventListener('blur', updateName);
     
-    // This part was very strange. Please take another look. It was not updating without the this
     function updateName() {
         playerName = playerSpan.textContent;
+        // worth revisiting later for understanding!
+        // was not updating for access by other modules
+        // without `this` keyword
         this.playerName = playerName;
     }
 
@@ -317,7 +324,6 @@ let AI = (function() {
     let allowedMoves;
 
     function randomMove() {
-        currentBoard = [];
         currentBoard = gameBoard.board;
         allowedMoves = [];
         for ([index, square] of currentBoard.entries()) {
@@ -328,12 +334,70 @@ let AI = (function() {
         moveIndex = Math.floor(Math.random() * allowedMoves.length);
         move = allowedMoves[moveIndex];
         gameBoard.updateBoard(2, (move + 1))
-
         // +1 due to awkward discrepancy between array numbering (from zero) and square numbering (from 1)... sorry
+    }
+
+    // Best Move Algorithm
+
+    /* Algorithm should first look at the allowed moves.
+    
+    Then for each move, if the algorithm returns a win state, that should be the move.
+
+    If none are available, if the move blocks a win state, that should be the move.
+    
+    I read that this should be done recursively on https://www.freecodecamp.org/news/minimax-algorithm-guide-how-to-create-an-unbeatable-ai/ but did not read the implementation :)
+
+    Note after writing - but I didn't even need a recursive step? The above two... seem to be enough to make it unbeatable??
+    
+    */
+
+    function bestMove() {
+        currentBoard = gameBoard.board;
+        allowedMoves = [];
+        for ([index, square] of currentBoard.entries()) {
+            if (square === 0) {
+                allowedMoves.push(index);
+            }
+        }
+
+        // Make a move that gets a win
+        for (eachIndex of allowedMoves) {
+            let hypotheticalBoard = [...currentBoard];
+
+            hypotheticalBoard[eachIndex] = 2;
+
+            isWin = gameBoard.checkWin(hypotheticalBoard);
+
+            if (isWin) {
+                gameBoard.updateBoard(2, eachIndex + 1);
+                return
+            }
+        }
+
+        // Make move to block a win
+        for (eachIndex of allowedMoves) {
+            let hypotheticalBoard = [...currentBoard];
+
+            hypotheticalBoard[eachIndex] = 1;
+
+            isWin = gameBoard.checkWin(hypotheticalBoard); 
+
+            if (isWin) {
+                gameBoard.updateBoard(2, eachIndex + 1);
+                return
+            }
+        }
+
+        // Otherwise, just move randomly
+        moveIndex = Math.floor(Math.random() * allowedMoves.length);
+        move = allowedMoves[moveIndex];
+        gameBoard.updateBoard(2, (move + 1))
+
     }
 
     return {
         randomMove,
+        bestMove,
     }
 
 })();
