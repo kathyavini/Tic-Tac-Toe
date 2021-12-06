@@ -32,10 +32,11 @@ let gameBoard = (function(){
             board[index] = 0;
         }
         displayBoard();
-        updateAvailableMoves();
+        updateClickableSquares();
     }
 
-    function updateAvailableMoves() {
+    function updateClickableSquares() {
+        availableMoves = [];
         for ([index, square] of board.entries()) {
             targetSquare = document.querySelector(`[data-square="${index + 1}"]`);
             if (square !== 0) {
@@ -49,7 +50,7 @@ let gameBoard = (function(){
     function updateBoard(mark, position) {
         board[position - 1] = mark;
         displayBoard();
-        updateAvailableMoves();
+        updateClickableSquares();
         checkForGameEnd();
     }
 
@@ -107,6 +108,7 @@ let gameBoard = (function(){
     return {
         updateBoard,
         clearBoard,
+        board, // wasn't planning to expose, but AI!
     }
     
 })();
@@ -115,7 +117,10 @@ let gameBoard = (function(){
 // Public methods: addEventListeners, endGame
 let game = (function() {
     
+    let AIPlayer = true;
     let currentPlayer = 1;
+    let position; // For win check that works with AI
+
     let hoverTiles = document.querySelectorAll('main div');
     let resetButton = document.querySelector('button');
     let root = document.querySelector(':root');
@@ -147,12 +152,22 @@ let game = (function() {
     }
 
     function placeMark() {
+        
+        if (AIPlayer) {
+            gameBoard.updateBoard(1, this.dataset.square);
+            AI.randomMove();
+
+            return;
+        }
+
+        // Two player implementation
         if (currentPlayer == 1) {
             gameBoard.updateBoard(1, this.dataset.square);
         } else if (currentPlayer == 2) {
             gameBoard.updateBoard(2, this.dataset.square);
         }
         changePlayer();
+
     }
 
     function showWinLine(type) {
@@ -207,7 +222,11 @@ let game = (function() {
 
         showWinLine(type);
 
-        if (currentPlayer == 1) {
+        // This version works with AI as well (vs. checking currentPlayer)
+        position = type.slice(1, 2);
+        playerAtWinPosition = gameBoard.board[position - 1];
+
+        if (playerAtWinPosition == 1) {
             winner = player1.returnName();
         } else {
             winner = player2.returnName();
@@ -229,9 +248,23 @@ let game = (function() {
         winLine.classList.remove("blur");
     }
 
+    function toggleAIPlayer() {
+        if (AIPlayer == false) {
+            AIPlayer = true;
+        } else {
+            AIPlayer = false;
+        }
+
+        // This necessary for the name module to call this this
+        this.AIPlayer = AIPlayer;
+        resetButton.click();
+    }
+
     return {
         addEventListeners,
         endGame,
+        AIPlayer,
+        toggleAIPlayer,
     }
 })();
 
@@ -239,28 +272,32 @@ let game = (function() {
 // The players objects
 
 // Not so sure why I would use these
-// Currently they do nothing but store and display their names.
+// Currently they only store and display their names.
 // But I need to practice making a factory function, so...
 
 function createPlayer(playerNumber) {
 
     let playerSpans = document.querySelectorAll('span');
     let playerSpan = playerSpans[playerNumber - 1];
-    
-    // Currently loads as Human vs. Computer
-    // let playerName = playerSpan.textContent;
-
-    // If you prefer Player 1, Player 2:
-    let playerName = '';
+    let playerName;
 
     playerSpan.addEventListener('blur', updateName);
     
+    // This part was very strange. Please take another look. It was not updating without the this
     function updateName() {
         playerName = playerSpan.textContent;
         this.playerName = playerName;
     }
 
     function returnName() {
+        if (game.AIPlayer) {
+            // Currently loads as Human vs. Computer
+            playerName = playerSpan.textContent;
+        } else {
+            // Defaults to Player 1, Player 2 if not changed
+            playerName = '';
+        }
+
         if (playerName) {
             return playerName;
         } else {
@@ -272,6 +309,35 @@ function createPlayer(playerNumber) {
         returnName
     }
 }
+
+
+let AI = (function() {
+
+    let currentBoard;
+    let allowedMoves;
+
+    function randomMove() {
+        currentBoard = [];
+        currentBoard = gameBoard.board;
+        allowedMoves = [];
+        for ([index, square] of currentBoard.entries()) {
+            if (square === 0) {
+                allowedMoves.push(index);
+            }
+        }
+        moveIndex = Math.floor(Math.random() * allowedMoves.length);
+        move = allowedMoves[moveIndex];
+        gameBoard.updateBoard(2, (move + 1))
+
+        // +1 due to awkward discrepancy between array numbering (from zero) and square numbering (from 1)... sorry
+    }
+
+    return {
+        randomMove,
+    }
+
+})();
+
 
 let player1 = createPlayer(1);
 let player2 = createPlayer(2);
